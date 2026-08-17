@@ -309,8 +309,8 @@ The project uses the following freight-rate assumptions:
 
 | Truck Type             | Freight Rate |
 | ---------------------- | -----------: |
-| Non-refrigerated truck | ₹3.5 / MT-km |
-| Refrigerated truck     | ₹5.5 / MT-km |
+| Non-refrigerated truck | ₹35 / MT-km |
+| Refrigerated truck     | ₹55 / MT-km |
 
 The requirement for a refrigerated truck is derived from the commodity characteristics.
 

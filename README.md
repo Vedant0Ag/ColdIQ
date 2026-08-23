@@ -263,6 +263,39 @@ The model then ranks the top opportunities within each district.
 
 ---
 
+### Financial Feasibility
+
+The district investment model is supported by a financial feasibility layer that evaluates the economics of the proposed storage and trading cycle.
+
+The model incorporates:
+
+- project CAPEX,
+- term loan,
+- promoter equity,
+- government subsidy,
+- construction-period interest,
+- post-subsidy loan,
+- holding-period interest,
+- inventory procurement,
+- working capital,
+- promoter-funded inventory,
+- working-capital interest,
+- electricity cost,
+- trading revenue,
+- gross trading profit, and
+- total financing cost.
+
+The resulting metrics include:
+
+- Net Trading Profit
+- ROI
+- Payback Period
+- Promoter Cash Deployed
+
+This allows a commodity opportunity to be evaluated not only from a market perspective but also from an investment feasibility perspective.
+
+---
+
 # 📍 Intrastate Storage Model
 
 The intrastate model answers:
@@ -292,6 +325,49 @@ The final output classifies locations as:
 - **Moderate Storage Location**
 - **Weak Storage Location**
 - **Avoid**
+
+---
+
+### Break-Even Analysis
+
+ColdIQ calculates break-even thresholds to determine how much market conditions can change before an opportunity becomes financially unattractive.
+
+The model calculates:
+
+- Break-Even Selling Price
+- Break-Even Buying Price
+- Break-Even Utilization
+- Selling Price Safety Margin
+- Buying Price Safety Margin
+- Utilization Safety Margin
+
+These metrics help distinguish between opportunities that are merely profitable and opportunities that have sufficient operating headroom.
+
+### Sensitivity Analysis
+
+The sensitivity model evaluates the effect of changes in key variables on:
+
+- Net Trading Profit
+- ROI
+- Payback Period
+
+Variables analyzed include:
+
+- Holding Period
+- Interest Rate
+- Utilization
+- Electricity Cost
+- Spoilage
+- Buying Price
+- Selling Price
+
+The analysis provides downside and upside scenarios around the base case.
+
+### Scenario Analysis
+
+The Streamlit application allows users to modify selected operating and financial assumptions and observe the resulting financial outcomes.
+
+Scenario outputs are modeled estimates intended for comparison rather than guaranteed returns.
 
 ---
 
@@ -416,6 +492,23 @@ The scenario section allows the user to adjust:
 - subsidy.
 
 The resulting financial figures are **modeled scenario estimates**, not guaranteed real-world returns.
+
+## Financial & Risk Analysis
+
+For a selected district and commodity, the application also exposes:
+
+- Net Trading Profit
+- ROI
+- Payback Period
+- Promoter Cash Deployed
+- Break-Even Selling Price
+- Break-Even Buying Price
+- Break-Even Utilization
+- Safety Margins
+- Sensitivity Analysis
+- Scenario Analysis
+
+This allows users to move from **market opportunity → financial feasibility → risk assessment → investment decision** within the same workflow.
 
 ## 📍 Intrastate Storage Advisor
 
@@ -584,6 +677,10 @@ The Streamlit application can be deployed online so that users can access ColdIQ
 | Transportation analysis       | ✅ Completed |
 | Electricity analysis          | ✅ Completed |
 | District investment model     | ✅ Completed |
+| Financial feasibility model   | ✅ Completed |
+| Break-even analysis           | ✅ Completed |
+| Sensitivity analysis          | ✅ Completed |
+| Scenario analysis             | ✅ Completed |
 | Intrastate storage model      | ✅ Completed |
 | Interstate trade model        | ✅ Completed |
 | Power BI dashboard            | ✅ Completed |

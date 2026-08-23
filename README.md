@@ -294,39 +294,6 @@ The resulting metrics include:
 
 This allows a commodity opportunity to be evaluated not only from a market perspective but also from an investment feasibility perspective.
 
----
-
-# 📍 Intrastate Storage Model
-
-The intrastate model answers:
-
-> **Where should a particular commodity be stored within a state?**
-
-The model compares districts using:
-
-```text
-Seasonal Price Opportunity
-        +
-Market Reliability
-        +
-Price Stability
-        +
-Production
-        ↓
-Storage Location Score
-```
-
-The model also considers market observations and active months while determining whether the underlying data is sufficiently reliable.
-
-The final output classifies locations as:
-
-- **Strong Storage Location**
-- **Good Storage Location**
-- **Moderate Storage Location**
-- **Weak Storage Location**
-- **Avoid**
-
----
 
 ### Break-Even Analysis
 
@@ -368,6 +335,38 @@ The analysis provides downside and upside scenarios around the base case.
 The Streamlit application allows users to modify selected operating and financial assumptions and observe the resulting financial outcomes.
 
 Scenario outputs are modeled estimates intended for comparison rather than guaranteed returns.
+
+---
+
+# 📍 Intrastate Storage Model
+
+The intrastate model answers:
+
+> **Where should a particular commodity be stored within a state?**
+
+The model compares districts using:
+
+```text
+Seasonal Price Opportunity
+        +
+Market Reliability
+        +
+Price Stability
+        +
+Production
+        ↓
+Storage Location Score
+```
+
+The model also considers market observations and active months while determining whether the underlying data is sufficiently reliable.
+
+The final output classifies locations as:
+
+- **Strong Storage Location**
+- **Good Storage Location**
+- **Moderate Storage Location**
+- **Weak Storage Location**
+- **Avoid**
 
 ---
 

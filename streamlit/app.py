@@ -1,5 +1,5 @@
-
 import streamlit as st
+import pandas as pd
 
 st.markdown(
     """
@@ -121,6 +121,25 @@ st.markdown(
         color: var(--text-color) !important;
     }
 
+    /* ---------- SECTION CARDS / POLISH ---------- */
+
+    .advisor-card {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        padding: 1rem 1.15rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .stButton > button,
+    div[data-baseweb="select"] > div {
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    section[data-testid="stSidebar"] [data-testid="stRadio"] label {
+        font-weight: 600;
+    }
+
     /* ---------- DIVIDER ---------- */
 
     hr {
@@ -180,6 +199,35 @@ FROM commodity_distric_investment
 
 df = conn.query(query, ttl=600)
 
+financial_query = """
+SELECT *
+FROM merchant_financial_summary
+"""
+
+financial_df = conn.query(financial_query, ttl=600)
+
+break_even_query = """
+SELECT *
+FROM merchant_breakeven_analysis
+"""
+
+break_even_df = conn.query(
+    break_even_query,
+    ttl=600
+)
+
+
+
+sensitivity_query = """
+SELECT *
+FROM merchant_sensitivity_summary
+"""
+
+sensitivity_df = conn.query(
+    sensitivity_query,
+    ttl=600
+)
+
 st.sidebar.markdown(
     """
     <div style="
@@ -201,6 +249,7 @@ page = st.sidebar.radio(
     "Analysis",
     [
         "District Commodity Advisor",
+        "Financial Model",
         "Intrastate Storage Advisor",
         "Interstate Trade Advisor"
     ]
@@ -227,7 +276,8 @@ if page == "District Commodity Advisor":
 
     selected_district = st.sidebar.selectbox(
         "District",
-        districts
+        districts,
+        key="advisor_district"
     )
 
     district_df = df[
@@ -235,7 +285,28 @@ if page == "District Commodity Advisor":
         (df["District"] == selected_district)
     ]
 
-    if district_df.empty:
+    # Optional commodity filter for the district advisor.
+    # "All Commodities" keeps the district-wide Top 5 view.
+    advisor_commodities = sorted(
+        district_df["Commodity"].dropna().unique()
+    )
+
+    commodity_filter_options = ["All Commodities"] + advisor_commodities
+
+    selected_commodity_filter = st.sidebar.selectbox(
+        "Commodity",
+        commodity_filter_options,
+        key="advisor_commodity"
+    )
+
+    if selected_commodity_filter != "All Commodities":
+        filtered_district_df = district_df[
+            district_df["Commodity"] == selected_commodity_filter
+        ].copy()
+    else:
+        filtered_district_df = district_df.copy()
+
+    if filtered_district_df.empty:
 
         st.warning(
             "No investment opportunities found for this district."
@@ -248,7 +319,7 @@ if page == "District Commodity Advisor":
         # -----------------------------------
 
         top_5 = (
-            district_df
+            filtered_district_df
             .sort_values("Commodity_Rank")
             .drop_duplicates(
                 subset=["Commodity"],
@@ -273,6 +344,7 @@ if page == "District Commodity Advisor":
 
             st.header("🏆 District Recommendation")
 
+            st.markdown('<div class="advisor-card">', unsafe_allow_html=True)
             st.metric(
                 "Top Recommendation",
                 best["Commodity"]
@@ -287,6 +359,7 @@ if page == "District Commodity Advisor":
                 f"Decision: "
                 f"**{best['Investment_Decision']}**"
             )
+            st.markdown('</div>', unsafe_allow_html=True)
 
             # -----------------------------------
             # COMMODITY SELECTION
@@ -298,10 +371,17 @@ if page == "District Commodity Advisor":
                 "Commodity"
             ].tolist()
 
-            selected_commodity = st.selectbox(
-                "Select a commodity for detailed analysis",
-                commodity_options
-            )
+            if selected_commodity_filter != "All Commodities":
+                selected_commodity = selected_commodity_filter
+                st.caption(
+                    f"Commodity filter: **{selected_commodity}**"
+                )
+            else:
+                selected_commodity = st.selectbox(
+                    "Select a commodity for detailed analysis",
+                    commodity_options,
+                    key="advisor_detail_commodity"
+                )
 
             selected_rows = top_5[
                 top_5["Commodity"] == selected_commodity
@@ -407,8 +487,6 @@ if page == "District Commodity Advisor":
                 hide_index=True,
                 use_container_width=True
                 )
-
-
             # -----------------------------------
             # SCENARIO ANALYSIS
             # -----------------------------------
@@ -418,10 +496,16 @@ if page == "District Commodity Advisor":
             st.header("📊 Scenario Analysis")
 
             st.write(
-                f"Scenario analysis for **{selected_commodity}**. "
-                "Adjust operating assumptions to evaluate how the "
-                "estimated financial outcome changes."
+                f"""
+                Scenario analysis for **{selected_commodity}**. 
+                Adjust operating assumptions to evaluate how the 
+                estimated financial outcome changes.
+                """
             )
+
+            # -----------------------------------
+            # SCENARIO INPUTS
+            # -----------------------------------
 
             col1, col2 = st.columns(2)
 
@@ -438,16 +522,16 @@ if page == "District Commodity Advisor":
                 utilization = st.slider(
                     "Facility Utilization (%)",
                     min_value=30,
-                    max_value=90,
-                    value=60,
+                    max_value=100,
+                    value=100,
                     step=5
                 )
 
                 operating_cost_rate = st.slider(
                     "Other Operating Costs (% of Revenue)",
-                    min_value=10,
-                    max_value=50,
-                    value=25,
+                    min_value=0,
+                    max_value=30,
+                    value=0,
                     step=5
                 )
 
@@ -477,33 +561,95 @@ if page == "District Commodity Advisor":
                     step=5
                 )
 
+
             # -----------------------------------
-            # SELECTED COMMODITY VALUES
+            # LOAD FINAL FINANCIAL MODEL
             # -----------------------------------
 
+
+            scenario_financial_df = financial_df.loc[
+                (financial_df["State"] == selected_row["State"]) &
+                (financial_df["District"] == selected_row["District"]) &
+                (financial_df["Commodity"] == selected_row["Commodity"])
+                ].copy()
+            if scenario_financial_df.empty:
+                st.error("Financial model data is not available for this commodity.")
+                st.stop()
+            financial_row = scenario_financial_df.iloc[0]
+                # -----------------------------------
+                # BASE COMMODITY VALUES
+                # -----------------------------------
+
             buy_price = float(
-                selected_row["Buy_Price_Per_MT"]
+                financial_row["Buy_Price_Per_MT"]
             )
 
             sell_price = float(
-                selected_row["Sell_Price_Per_MT"]
+                financial_row["Sell_Price_Per_MT"]
             )
 
             holding_months = float(
-                selected_row["Holding_Months"]
+                financial_row["Holding_Months"]
             )
+
+            # Storage spoilage still comes from
+            # commodity investment model because
+            # merchant_financial_summary does not
+            # contain the spoilage percentage.
 
             spoilage = float(
                 selected_row["Storage_Spoilage_Percent"]
             ) / 100
 
-            infrastructure_cost = float(
+            infrastructure_cost_per_mt = float(
                 selected_row["Infrastructure_Cost_Per_MT"]
             )
 
             price_kwh = float(
                 selected_row["Price_KWh"]
             )
+
+
+            # -----------------------------------
+            # PROJECT INVESTMENT
+            # -----------------------------------
+
+            project_capex = (
+                facility_capacity
+                * infrastructure_cost_per_mt
+            )
+
+            term_loan = (
+                project_capex
+                * 0.75
+            )
+
+            owner_equity = (
+                project_capex
+                * 0.25
+            )
+
+
+            # -----------------------------------
+            # NHB SUBSIDY
+            # -----------------------------------
+
+            nhb_subsidy = (
+                project_capex
+                * subsidy
+                / 100
+            )
+
+            effective_project_cost = (
+                project_capex
+                - nhb_subsidy
+            )
+
+            effective_net_loan = (
+                term_loan
+                - nhb_subsidy
+            )
+
 
             # -----------------------------------
             # EFFECTIVE CAPACITY
@@ -515,127 +661,252 @@ if page == "District Commodity Advisor":
                 / 100
             )
 
+
             # -----------------------------------
-            # SALEABLE CAPACITY
+            # SALEABLE QUANTITY
             # -----------------------------------
 
-            saleable_capacity = (
+            saleable_quantity = (
                 effective_capacity
                 * (1 - spoilage)
             )
 
-            # -----------------------------------
-            # REVENUE
-            # -----------------------------------
-
-            saleable_revenue = (
-                saleable_capacity
-                * sell_price
-            )
 
             # -----------------------------------
-            # PROCUREMENT COST
+            # INVENTORY PROCUREMENT
             # -----------------------------------
 
-            procurement_cost = (
+            inventory_procurement_cost = (
                 effective_capacity
                 * buy_price
             )
+
+
+            # -----------------------------------
+            # TRADING REVENUE
+            # -----------------------------------
+
+            trading_revenue = (
+                saleable_quantity
+                * sell_price
+            )
+
+
+            # -----------------------------------
+            # GROSS TRADING PROFIT
+            # -----------------------------------
+
+            gross_trading_profit = (
+                trading_revenue
+                - inventory_procurement_cost
+            )
+
+
+            # -----------------------------------
+            # WORKING CAPITAL
+            # -----------------------------------
+
+            working_capital_limit = (
+                trading_revenue
+                * 0.20
+            )
+
+            working_capital_funded = min(
+                inventory_procurement_cost,
+                working_capital_limit
+            )
+
+            promoter_inventory_investment = max(
+                inventory_procurement_cost
+                - working_capital_limit,
+                0
+            )
+
+
+            # -----------------------------------
+            # CONSTRUCTION IDC
+            # -----------------------------------
+            #
+            # Scale the finalized base IDC
+            # according to facility capacity.
+            #
+
+            base_idc = float(
+                financial_row["Total_IDC"]
+            )
+
+            base_capacity = float(
+                financial_row["Facility_Capacity_MT"]
+            )
+
+            total_idc = (
+                base_idc
+                * facility_capacity
+                / base_capacity
+                if base_capacity > 0
+                else 0
+            )
+
+
+            # -----------------------------------
+            # POST-SUBSIDY LOAN
+            # -----------------------------------
+
+            post_subsidy_loan = max(
+                effective_net_loan,
+                0
+            )
+
+
+            # -----------------------------------
+            # HOLDING PERIOD INTEREST
+            # -----------------------------------
+            #
+            # AIF:
+            # First ₹2 crore → 6%
+            # Remaining amount → 9%
+            #
+
+            aif_eligible_balance = min(
+                post_subsidy_loan,
+                20000000
+            )
+
+            non_aif_balance = max(
+                post_subsidy_loan
+                - 20000000,
+                0
+            )
+
+            holding_period_interest = (
+
+                aif_eligible_balance
+                * 0.06
+                / 12
+                * holding_months
+
+            ) + (
+
+                non_aif_balance
+                * 0.09
+                / 12
+                * holding_months
+
+            )
+
+
+            # -----------------------------------
+            # WORKING CAPITAL INTEREST
+            # -----------------------------------
+
+            working_capital_interest = (
+
+                working_capital_funded
+                * 0.09
+                / 12
+                * holding_months
+
+            )
+
 
             # -----------------------------------
             # ELECTRICITY COST
             # -----------------------------------
 
-            electricity_cost = (
+            total_electricity_cost = (
+
                 price_kwh
                 * facility_load
                 * (load_factor / 100)
                 * 24
                 * 30
                 * holding_months
+
             )
 
+
             # -----------------------------------
-            # OTHER OPERATING COSTS
+            # OTHER OPERATING COST
             # -----------------------------------
 
-            operating_cost = (
-                saleable_revenue
+            other_operating_cost = (
+
+                trading_revenue
                 * operating_cost_rate
                 / 100
+
             )
 
+
             # -----------------------------------
-            # INFRASTRUCTURE COST
+            # TOTAL FINANCING COST
             # -----------------------------------
 
-            net_infrastructure_cost_per_mt = (
-                infrastructure_cost
-                * (1 - subsidy / 100)
+            total_financing_cost = (
+
+                total_idc
+                + holding_period_interest
+                + working_capital_interest
+
             )
 
-            total_infrastructure_cost = (
-                net_infrastructure_cost_per_mt
-                * facility_capacity
+
+            # -----------------------------------
+            # TOTAL PROMOTER CASH DEPLOYED
+            # -----------------------------------
+
+            total_promoter_cash_deployed = (
+
+                owner_equity
+                + promoter_inventory_investment
+
             )
 
+
             # -----------------------------------
-            # TOTAL COST
+            # NET TRADING PROFIT
             # -----------------------------------
 
-            total_cost = (
-                procurement_cost
-                + electricity_cost
-                + operating_cost
-                + total_infrastructure_cost
+            net_trading_profit = (
+
+                gross_trading_profit
+                - total_financing_cost
+                - total_electricity_cost
+                - other_operating_cost
+
             )
 
-            # -----------------------------------
-            # NET RETURN
-            # -----------------------------------
-
-            net_return = (
-                saleable_revenue
-                - total_cost
-            )
-
-            # -----------------------------------
-            # ANNUALIZED RETURN
-            # -----------------------------------
-
-            annual_cycles = (
-                12 / holding_months
-                if holding_months > 0
-                else 0
-            )
-
-            annual_return = (
-                net_return
-                * annual_cycles
-            )
 
             # -----------------------------------
             # ROI
             # -----------------------------------
 
             roi = (
-                annual_return
-                / total_infrastructure_cost
+
+                net_trading_profit
+                / total_promoter_cash_deployed
                 * 100
-                if total_infrastructure_cost > 0
+
+                if total_promoter_cash_deployed > 0
                 else 0
+
             )
+
 
             # -----------------------------------
             # PAYBACK
             # -----------------------------------
 
             payback = (
-                total_infrastructure_cost
-                / annual_return
-                if annual_return > 0
+
+                total_promoter_cash_deployed
+                / net_trading_profit
+
+                if net_trading_profit > 0
                 else 999
+
             )
+
 
             # -----------------------------------
             # SCENARIO RESULTS
@@ -655,56 +926,530 @@ if page == "District Commodity Advisor":
             with col2:
 
                 st.metric(
-                    "Electricity Cost",
-                    f"₹{electricity_cost:,.0f}"
+                    "Trading Revenue",
+                    f"₹{trading_revenue:,.0f}"
                 )
 
             with col3:
 
                 st.metric(
-                    "Estimated Net Return",
-                    f"₹{net_return:,.0f}"
+                    "Net Trading Profit",
+                    f"₹{net_trading_profit:,.0f}"
                 )
 
             with col4:
 
                 st.metric(
-                    "Estimated ROI",
+                    "ROI",
                     f"{roi:.1f}%"
                 )
 
-            col1, col2, col3 = st.columns(3)
+
+            col1, col2, col3, col4 = st.columns(4)
 
             with col1:
 
                 st.metric(
-                    "Annualized Return",
-                    f"₹{annual_return:,.0f}"
+                    "Promoter Cash Deployed",
+                    f"₹{total_promoter_cash_deployed:,.0f}"
                 )
 
             with col2:
 
                 st.metric(
-                    "Estimated Payback",
-                    f"{payback:.1f} years"
+                    "Total Financing Cost",
+                    f"₹{total_financing_cost:,.0f}"
                 )
 
             with col3:
 
                 st.metric(
-                    "Electricity / MT",
-                    f"₹{electricity_cost / effective_capacity:,.0f}"
-                    if effective_capacity > 0
-                    else "₹0"
+                    "Electricity Cost",
+                    f"₹{total_electricity_cost:,.0f}"
                 )
 
-            st.caption(
-                "Scenario outputs are modeled estimates and depend on "
-                "the selected operating assumptions. Actual returns "
-                "will vary with occupancy, operating costs, market "
-                "conditions, financing, maintenance and other "
-                "real-world factors."
+            with col4:
+
+                st.metric(
+                    "Payback",
+                    f"{payback:.2f} years"
+                    if payback < 999
+                    else "Not Achievable"
+                )
+
+
+            # -----------------------------------
+            # COST BREAKDOWN
+            # -----------------------------------
+
+            st.subheader("Cost Breakdown")
+
+            scenario_cost_df = pd.DataFrame({
+
+                "Component": [
+                    "Inventory Procurement",
+                    "Electricity",
+                    "Financing",
+                    "Other Operating Costs"
+                ],
+
+                "Amount": [
+                    inventory_procurement_cost,
+                    total_electricity_cost,
+                    total_financing_cost,
+                    other_operating_cost
+                ]
+
+            })
+
+            st.bar_chart(
+                scenario_cost_df.set_index("Component")
             )
+
+
+            # -----------------------------------
+            # SCENARIO INTERPRETATION
+            # -----------------------------------
+
+            if net_trading_profit <= 0:
+
+                st.error(
+                    "🔴 This scenario is not financially viable. "
+                    "The modeled net trading profit is negative."
+                )
+
+            elif roi >= 100 and payback <= 1:
+
+                st.success(
+                    "🟢 Very Strong Opportunity — "
+                    "high modeled ROI with a short payback period."
+                )
+
+            elif roi >= 50 and payback <= 2:
+
+                st.success(
+                    "🟢 Strong Opportunity — "
+                    "the scenario remains financially attractive."
+                )
+
+            elif roi >= 25 and payback <= 3:
+
+                st.warning(
+                    "🟡 Moderate Opportunity — "
+                    "returns are positive but should be evaluated against risk."
+                )
+
+            else:
+
+                st.warning(
+                    "🟠 Weak Opportunity — "
+                    "the scenario has limited financial attractiveness."
+                )
+
+
+            st.caption(
+                "Scenario outputs are modeled estimates. They apply the finalized "
+                "ColdIQ financial logic while allowing operating assumptions such "
+                "as utilization, electricity load, subsidy and operating costs to "
+                "be varied."
+                )
+
+
+# ============================================================
+# FINANCIAL MODEL
+# ============================================================
+
+if page == "Financial Model":
+
+    st.header("💰 Merchant Trading Financial Model")
+
+    st.markdown(
+        """
+        Evaluate the financial feasibility of establishing a
+        cold-storage facility for merchant commodity trading.
+        """
+    )
+
+    # --------------------------------------------------------
+    # FILTERS
+    # --------------------------------------------------------
+
+    states = sorted(
+        financial_df["State"].dropna().unique()
+    )
+
+    selected_state = st.sidebar.selectbox(
+        "State",
+        states,
+        key="financial_state"
+    )
+
+    state_df = financial_df[
+        financial_df["State"] == selected_state
+    ]
+
+    districts = sorted(
+        state_df["District"].dropna().unique()
+    )
+
+    selected_district = st.sidebar.selectbox(
+        "District",
+        districts,
+        key="financial_district"
+    )
+
+    district_df = state_df[
+        state_df["District"] == selected_district
+    ]
+
+    commodities = sorted(
+        district_df["Commodity"].dropna().unique()
+    )
+
+    selected_commodity = st.sidebar.selectbox(
+        "Commodity",
+        commodities,
+        key="financial_commodity"
+    )
+
+    financial_row = district_df[
+        district_df["Commodity"] == selected_commodity
+    ].iloc[0]
+
+    # --------------------------------------------------------
+    # PROJECT INVESTMENT
+    # --------------------------------------------------------
+
+    st.subheader("🏗️ Project Investment")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Project CAPEX",
+            f"₹{financial_row['Project_CAPEX']/1e7:.2f} Cr"
+        )
+
+    with col2:
+        st.metric(
+            "Bank Term Loan",
+            f"₹{financial_row['Term_Loan']/1e7:.2f} Cr"
+        )
+
+    with col3:
+        st.metric(
+            "Promoter Equity",
+            f"₹{financial_row['Owner_Equity']/1e7:.2f} Cr"
+        )
+
+    with col4:
+        st.metric(
+            "NHB Subsidy",
+            f"₹{financial_row['NHB_Subsidy']/1e7:.2f} Cr"
+        )
+    # --------------------------------------------------------
+    # MERCHANT TRADING
+    # --------------------------------------------------------
+
+    st.subheader("📦 Merchant Trading Economics")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Inventory Procurement",
+            f"₹{financial_row['Inventory_Procurement_Cost']/1e7:.2f} Cr"
+        )
+
+    with col2:
+        st.metric(
+            "Saleable Quantity",
+            f"{financial_row['Saleable_Quantity_MT']:,.0f} MT"
+        )
+
+    with col3:
+        st.metric(
+            "Trading Revenue",
+            f"₹{financial_row['Trading_Revenue']/1e7:.2f} Cr"
+        )
+
+    with col4:
+        st.metric(
+            "Gross Trading Profit",
+            f"₹{financial_row['Gross_Trading_Profit']/1e7:.2f} Cr"
+        )
+
+    # --------------------------------------------------------
+    # OPERATING + FINANCING COSTS
+    # --------------------------------------------------------
+
+    st.subheader("⚡ Operating & Financing Costs")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Electricity Cost",
+            f"₹{financial_row['Total_Electricity_Cost']/1e5:.2f} L"
+        )
+
+    with col2:
+        st.metric(
+            "Holding Period Interest",
+            f"₹{financial_row['Holding_Period_Interest']/1e5:.2f} L"
+        )
+
+    with col3:
+        st.metric(
+            "Working Capital Interest",
+            f"₹{financial_row['Working_Capital_Interest']/1e5:.2f} L"
+        )
+
+    with col4:
+        st.metric(
+            "Total Financing Cost",
+            f"₹{financial_row['Total_Financing_Cost']/1e5:.2f} L"
+        )
+    # --------------------------------------------------------
+    # EFFECTIVE FINANCING
+    # --------------------------------------------------------
+
+    st.subheader("🏦 Effective Financing")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "Effective Project Cost",
+            f"₹{financial_row['Effective_Project_Cost']/1e7:.2f} Cr"
+        )
+
+    with col2:
+        st.metric(
+            "Effective Net Loan",
+            f"₹{financial_row['Effective_Net_Loan']/1e7:.2f} Cr"
+        )
+
+    with col3:
+        st.metric(
+            "Total IDC",
+            f"₹{financial_row['Total_IDC']/1e5:.2f} L"
+        )
+
+
+
+    # --------------------------------------------------------
+    # WORKING CAPITAL
+    # --------------------------------------------------------
+
+    st.subheader("💳 Working Capital")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "Bank WC Limit",
+            f"₹{financial_row['Working_Capital_Limit']/1e7:.2f} Cr"
+        )
+
+    with col2:
+        st.metric(
+            "Bank WC Funded",
+            f"₹{financial_row['Working_Capital_Funded']/1e7:.2f} Cr"
+        )
+
+    with col3:
+        st.metric(
+            "Promoter Inventory Investment",
+            f"₹{financial_row['Promoter_Inventory_Investment']/1e7:.2f} Cr"
+        )
+
+
+
+    # --------------------------------------------------------
+    # RETURNS
+    # --------------------------------------------------------
+
+    st.divider()
+
+    st.subheader("📈 Investment Returns")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "Promoter Cash Deployed",
+            f"₹{financial_row['Total_Promoter_Cash_Deployed']/1e7:.2f} Cr"
+        )
+
+    with col2:
+        st.metric(
+            "Net Trading Profit",
+            f"₹{financial_row['Net_Trading_Profit']/1e7:.2f} Cr"
+        )
+
+    with col3:
+        st.metric(
+            "ROI",
+            f"{financial_row['ROI_Percent']:.2f}%"
+        )
+
+    st.metric(
+        "Payback Period",
+        f"{financial_row['Payback_Years']:.2f} years"
+    )
+
+# --------------------------------------------------------
+# INVESTMENT DECISION
+# --------------------------------------------------------
+
+    st.divider()
+    st.subheader("🎯 Investment Decision")
+
+    roi = financial_row["ROI_Percent"]
+    payback = financial_row["Payback_Years"]
+    net_profit = financial_row["Net_Trading_Profit"]
+
+# Simple decision logic
+    if roi >= 100 and payback <= 1:
+        decision = "🟢 Very Strong Opportunity"
+    elif roi >= 75 and payback <= 2:
+        decision = "🟢 Strong Opportunity"
+    elif roi >= 50 and payback <= 3:
+        decision = "🟡 Moderate Opportunity"
+    elif roi >= 25 and payback <= 5:
+        decision = "🟠 Weak Opportunity"
+    else:
+        decision = "🔴 High Risk / Poor Opportunity"
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "Investment Decision",
+            decision
+        )
+
+    with col2:
+        st.metric(
+            "Net Profit",
+            f"₹{net_profit/1e7:.2f} Cr"
+        )
+
+    with col3:
+        st.metric(
+            "ROI",
+            f"{roi:.2f}%"
+        )
+
+    st.write(
+        f"""
+        **Interpretation:** The selected {selected_commodity} opportunity in
+        {selected_district}, {selected_state} generates an estimated net trading
+        profit of **₹{net_profit/1e7:.2f} Cr** with an ROI of **{roi:.2f}%**
+        and an estimated payback period of **{payback:.2f} years**.
+        """
+    )
+
+    
+# --------------------------------------------------------
+# BREAK-EVEN ANALYSIS
+# --------------------------------------------------------
+
+    st.divider()
+
+    st.subheader("⚖️ Break-Even Analysis")
+
+    break_even_row = break_even_df[
+        (break_even_df["State"] == selected_state) &
+        (break_even_df["District"] == selected_district) &
+        (break_even_df["Commodity"] == selected_commodity)
+    ].iloc[0]
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "Break-Even Selling Price",
+            f"₹{break_even_row['BreakEven_Selling_Price']:,.0f}/MT"
+        )
+
+    with col2:
+        st.metric(
+            "Break-Even Buying Price",
+            f"₹{break_even_row['BreakEven_Buy_Price']:,.0f}/MT"
+        )
+
+    with col3:
+        st.metric(
+            "Break-Even Utilization",
+            f"{break_even_row['BreakEven_Utilization_Percent']:.1f}%"
+        )
+
+    st.write(
+        f"**Decision:** {break_even_row['BreakEven_Decision']}"
+    )   
+
+# --------------------------------------------------------
+# SENSITIVITY ANALYSIS
+# --------------------------------------------------------
+
+    st.divider()
+
+    st.subheader("📊 Sensitivity Analysis")
+
+    sensitivity_display = sensitivity_df[
+        (sensitivity_df["State"] == selected_state) &
+        (sensitivity_df["District"] == selected_district) &
+        (sensitivity_df["Commodity"] == selected_commodity)
+    ]
+
+    display_columns = [
+        "Variable",
+        "Profit_Minus_15",
+        "Profit_Base",
+        "Profit_Plus_15",
+        "ROI_Minus_15",
+        "ROI_Base",
+        "ROI_Plus_15"
+    ]
+
+    st.dataframe(
+        sensitivity_display[display_columns],
+        hide_index=True,
+        use_container_width=True
+    )
+
+# --------------------------------------------------------
+# PROFIT & COST BREAKDOWN
+# --------------------------------------------------------
+
+    st.divider()
+    st.subheader("💰 Profit & Cost Breakdown")
+
+    profit = float(financial_row["Gross_Trading_Profit"])
+    electricity = float(financial_row["Total_Electricity_Cost"])
+    financing = float(financial_row["Total_Financing_Cost"])
+    net_profit = float(financial_row["Net_Trading_Profit"])
+
+    breakdown_df = pd.DataFrame({
+        "Component": [
+            "Gross Trading Profit",
+            "Electricity Cost",
+            "Financing Cost",
+            "Net Trading Profit"
+        ],
+        "Amount": [
+            profit,
+            electricity,
+            financing,
+            net_profit
+        ]
+    })
+
+    st.bar_chart(
+        breakdown_df.set_index("Component")
+    )
 
 
 if page == "Intrastate Storage Advisor":

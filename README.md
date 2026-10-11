@@ -336,6 +336,38 @@ The Streamlit application allows users to modify selected operating and financia
 
 Scenario outputs are modeled estimates intended for comparison rather than guaranteed returns.
 
+### Predictive Price Forecasting
+
+ColdIQ includes a predictive analytics layer that estimates the future median market price at the end of the selected investment holding period.
+
+The model uses:
+
+- historical monthly prices,
+- lagged price behaviour,
+- price volatility,
+- market observation coverage,
+- market coverage across locations,
+- seasonality,
+- commodity and variety,
+- state and district,
+- and the ColdIQ holding period.
+
+Two regression models were evaluated against a persistence baseline:
+
+- Linear Regression
+- Random Forest Regressor
+
+A weighted 70:30 Random Forest–Linear Regression ensemble was selected for the prototype based on chronological holdout performance.
+
+The final ensemble achieved:
+
+- **MAE:** ~₹1,045/MT
+- **RMSE:** ~₹1,840/MT
+- **MAPE:** ~29.46%
+- **R²:** ~0.836
+
+The predictive output is used as a forward-looking estimate for downstream financial analysis and is not treated as a guaranteed market price.
+
 ---
 
 # 📍 Intrastate Storage Model
